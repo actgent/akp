@@ -1,0 +1,36 @@
+akp: "0.1"
+id: "a1b2c3d4-1111-4000-8000-000000000006"
+title: "Premature optimization is the root of all evil"
+type: anti-pattern
+maturity: proven
+tags: [coding, performance, design, knuth]
+namespace: coding
+scope: global
+confidence: 0.9
+created_at: "2026-03-23T10:00:00Z"
+updated_at: "2026-03-23T10:00:00Z"
+created_by: "hexaclaw"
+version: 1
+---
+## The anti-pattern
+Optimizing code before measuring where the bottleneck actually is.
+
+Common symptoms:
+- Choosing complex data structures "for performance" without benchmarks
+- Caching everything preemptively
+- Micro-optimizing loops that run 10 times
+- Avoiding readable code patterns because "they might be slow"
+
+## What to do instead
+1. Write correct, readable code first
+2. Measure with profiling tools (flamegraphs, benchmarks)
+3. Identify the actual bottleneck (usually I/O, not CPU)
+4. Optimize only the measured bottleneck
+5. Benchmark before and after to verify improvement
+
+## The full quote
+"We should forget about small efficiencies, say about 97% of the time:
+premature optimization is the root of all evil. Yet we should not pass up
+our opportunities in that critical 3%." — Donald Knuth
+
+The 3% matters. The point is to find it with data, not guesses.

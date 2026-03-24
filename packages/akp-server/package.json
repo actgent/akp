@@ -1,0 +1,46 @@
+{
+  "name": "@hexaclaw/akp-server",
+  "version": "0.1.0",
+  "description": "AKP (Agent Knowledge Platform) — local knowledge base for AI agents via MCP",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "bin": {
+    "akp-server": "bin/akp-server.mjs"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/index.cjs --external:@modelcontextprotocol/sdk && cp node_modules/sql.js/dist/sql-wasm.wasm dist/",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "keywords": [
+    "akp",
+    "agent-knowledge-platform",
+    "mcp",
+    "ai-agents",
+    "knowledge-base",
+    "model-context-protocol"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hexaclaw/akp"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "sql.js": "^1.14.1",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.27.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

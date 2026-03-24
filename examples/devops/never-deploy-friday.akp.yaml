@@ -1,0 +1,25 @@
+akp: "0.1"
+id: "a1b2c3d4-1111-4000-8000-000000000001"
+title: "Never deploy on Friday afternoon"
+type: anti-pattern
+maturity: proven
+tags: [devops, deploy, safety, incident-prevention]
+namespace: engineering
+scope: global
+confidence: 0.95
+created_at: "2026-03-23T10:00:00Z"
+updated_at: "2026-03-23T10:00:00Z"
+created_by: "hexaclaw"
+version: 1
+---
+Deployments after 3pm Friday have a 3x higher incident rate due to reduced
+staffing for incident response over the weekend.
+
+## What to do instead
+- Schedule deployments for Monday–Thursday before 2pm
+- If a Friday deploy is unavoidable, ensure on-call coverage through the weekend
+- Use feature flags to decouple deployment from activation
+
+## Evidence
+- Google SRE Handbook recommends avoiding end-of-week changes
+- PagerDuty incident data shows 67% more Friday evening pages vs Tuesday

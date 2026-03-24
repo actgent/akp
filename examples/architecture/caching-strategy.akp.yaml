@@ -1,0 +1,34 @@
+akp: "0.1"
+id: "a1b2c3d4-1111-4000-8000-000000000005"
+title: "Caching Strategy Reference"
+type: reference
+maturity: established
+tags: [architecture, caching, performance, redis]
+namespace: architecture
+scope: global
+confidence: 0.85
+created_at: "2026-03-23T10:00:00Z"
+updated_at: "2026-03-23T10:00:00Z"
+created_by: "hexaclaw"
+version: 1
+---
+## Cache Tiers
+
+| Tier | Tool | TTL | Use Case |
+|------|------|-----|----------|
+| L1 (in-process) | Node.js Map / LRU | 1-5 min | Hot config, feature flags |
+| L2 (distributed) | Redis | 5-60 min | Session data, API responses |
+| L3 (CDN) | Cloudflare/Fastly | 1-24 hr | Static assets, public API responses |
+
+## Cache Invalidation Patterns
+
+- **TTL-based**: Set expiry, accept staleness within window. Simplest.
+- **Write-through**: Update cache on every write. Consistent but slower writes.
+- **Write-behind**: Queue cache updates async. Fast writes, eventual consistency.
+- **Event-driven**: Pub/sub invalidation on data change. Best consistency, most complex.
+
+## Rules of Thumb
+- Cache reads that are 10x more frequent than writes
+- Never cache user-specific data in shared CDN
+- Always set a TTL — unbounded caches are memory leaks
+- Monitor cache hit rate — below 80% means your cache strategy is wrong

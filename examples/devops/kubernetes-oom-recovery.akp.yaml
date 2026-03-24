@@ -1,0 +1,30 @@
+akp: "0.1"
+id: "a1b2c3d4-1111-4000-8000-000000000002"
+title: "Kubernetes OOM Kill Recovery"
+type: procedure
+maturity: established
+tags: [kubernetes, debugging, memory, oom]
+namespace: devops
+scope: global
+confidence: 0.9
+created_at: "2026-03-23T10:00:00Z"
+updated_at: "2026-03-23T10:00:00Z"
+created_by: "hexaclaw"
+version: 1
+---
+## When to use
+Pod is in CrashLoopBackOff with OOMKilled reason.
+
+## Steps
+1. Check pod status: `kubectl describe pod <name> -n <namespace>`
+2. Look for `OOMKilled` in Last State → Reason
+3. Check current memory limits: `kubectl get pod <name> -o jsonpath='{.spec.containers[*].resources}'`
+4. Check actual memory usage: `kubectl top pod <name>`
+5. Increase memory limit by 50%: update deployment spec `resources.limits.memory`
+6. Apply: `kubectl apply -f deployment.yaml`
+7. Monitor for 15 minutes: `kubectl top pod <name> --watch`
+
+## If it keeps happening
+- Profile the application for memory leaks
+- Check for unbounded caches or connection pools
+- Consider horizontal scaling instead of vertical

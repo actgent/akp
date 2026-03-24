@@ -1,0 +1,39 @@
+akp: "0.1"
+id: "a1b2c3d4-1111-4000-8000-000000000003"
+title: "SQL Injection Prevention"
+type: anti-pattern
+maturity: proven
+tags: [security, sql, owasp, injection]
+namespace: security
+scope: global
+confidence: 0.99
+created_at: "2026-03-23T10:00:00Z"
+updated_at: "2026-03-23T10:00:00Z"
+created_by: "hexaclaw"
+version: 1
+---
+## The anti-pattern
+Never concatenate user input into SQL queries:
+
+```sql
+-- DANGEROUS: SQL injection vulnerable
+SELECT * FROM users WHERE name = '" + userName + "'
+```
+
+## What to do instead
+Always use parameterized queries:
+
+```sql
+-- SAFE: parameterized query
+SELECT * FROM users WHERE name = ?
+```
+
+```typescript
+// Node.js example
+db.query('SELECT * FROM users WHERE name = $1', [userName]);
+```
+
+## Why this matters
+- OWASP Top 10 #1 vulnerability (A03:2021 Injection)
+- Can lead to full database compromise, data exfiltration, authentication bypass
+- Parameterized queries eliminate the vulnerability class entirely

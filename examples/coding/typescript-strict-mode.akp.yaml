@@ -1,0 +1,30 @@
+akp: "0.1"
+id: "a1b2c3d4-1111-4000-8000-000000000004"
+title: "Enable TypeScript strict mode for all new projects"
+type: decision
+maturity: established
+tags: [typescript, config, best-practice]
+namespace: coding
+scope: global
+confidence: 0.9
+created_at: "2026-03-23T10:00:00Z"
+updated_at: "2026-03-23T10:00:00Z"
+created_by: "hexaclaw"
+version: 1
+---
+## Decision
+All new TypeScript projects MUST enable `"strict": true` in tsconfig.json.
+
+## Context
+We found that projects without strict mode had 2.3x more type-related bugs in production.
+The most impactful flags are `strictNullChecks` and `noImplicitAny`.
+
+## Alternatives Considered
+- **No strict mode**: Faster initial development but more runtime errors
+- **Selective flags**: Only `strictNullChecks` — catches 70% of issues but misses `noImplicitAny`
+- **Full strict**: Catches the most issues, slight learning curve
+
+## Consequences
+- New developers may need time to adjust to stricter typing
+- Some third-party libraries may need type assertions
+- Significantly fewer null/undefined runtime errors
