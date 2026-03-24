@@ -1,38 +1,62 @@
 #!/usr/bin/env node
 
+/**
+ * AKP MCP Server — Agent Knowledge Platform
+ *
+ * Dual mode:
+ *   - HEXACLAW_API_KEY set → cloud mode (semantic search, team sharing, persistent)
+ *   - No API key → local mode (SQLite, keyword search, offline)
+ */
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { initDb, createArticle, getArticle, updateArticle, deleteArticle, listArticles, searchArticles, recordFeedback } from "./db.js";
+import { initDb, createArticle, getArticle, updateArticle, listArticles, searchArticles, recordFeedback } from "./db.js";
+import { isCloudMode, getMode, cloudWrite, cloudSearch, cloudRead, cloudList, cloudFeedback } from "./cloud.js";
 import { ARTICLE_TYPES, MATURITY_LEVELS, SCOPES, FEEDBACK_OUTCOMES } from "./types.js";
 
-// Create MCP server
 const server = new McpServer({
   name: "akp",
   version: "0.1.0",
 });
 
-// Helper: format article for display
-function formatArticle(article: any): string {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatArticle(a: any): string {
   const lines = [
-    `# ${article.title}`,
-    `**ID:** ${article.id}`,
-    `**Type:** ${article.type} | **Maturity:** ${article.maturity} | **Version:** ${article.version}`,
-    `**Tags:** ${article.tags?.join(", ") || "none"}`,
-    `**Namespace:** ${article.namespace} | **Scope:** ${article.scope}`,
-    `**Confidence:** ${article.confidence} | **Helpful:** ${article.helpful_count} | **Harmful:** ${article.harmful_count}`,
-    article.expires_at ? `**Expires:** ${article.expires_at}` : null,
-    `**Created:** ${article.created_at} | **Updated:** ${article.updated_at}`,
+    `# ${a.title}`,
+    `**ID:** ${a.id}`,
+    `**Type:** ${a.type} | **Maturity:** ${a.maturity} | **Version:** ${a.version}`,
+    `**Tags:** ${(Array.isArray(a.tags) ? a.tags : []).join(", ") || "none"}`,
+    `**Namespace:** ${a.namespace || "default"} | **Scope:** ${a.scope || "private"}`,
+    `**Confidence:** ${a.confidence ?? 0.7} | **Helpful:** ${a.helpful_count ?? 0} | **Harmful:** ${a.harmful_count ?? 0}`,
+    a.expires_at ? `**Expires:** ${a.expires_at}` : null,
+    a.created_at ? `**Created:** ${a.created_at}` : null,
     ``,
-    article.content,
+    a.content,
   ].filter(Boolean);
   return lines.join("\n");
 }
 
-// --- Tool: akp_write ---
+function formatCloudArticles(data: any): string {
+  const articles = data.articles || data || [];
+  if (!Array.isArray(articles) || articles.length === 0) return "No articles found.";
+  return articles.map((a: any, i: number) => {
+    const score = a.score ? ` (score: ${Number(a.score).toFixed(2)})` : "";
+    return `${i + 1}. **${a.title}**${score}\n   ID: ${a.id} | Type: ${a.type} | Maturity: ${a.maturity} | v${a.version}\n   Tags: ${(a.tags || []).join(", ") || "none"}`;
+  }).join("\n\n");
+}
+
+function txt(text: string) { return { content: [{ type: "text" as const, text }] }; }
+function err(text: string) { return { content: [{ type: "text" as const, text }], isError: true }; }
+
+// ── akp_write ─────────────────────────────────────────────────────────────────
+
+const modeLabel = () => isCloudMode() ? "cloud — semantic search, team sharing" : "local — SQLite, offline";
+
 server.tool(
   "akp_write",
-  "Create or update a knowledge article. Types: fact, procedure, decision, reference, playbook, anti-pattern. Costs 0 credits (local storage).",
+  `Create or update a knowledge article. Types: fact, procedure, decision, reference, playbook, anti-pattern. Mode: auto-detects cloud (HEXACLAW_API_KEY) or local (SQLite).`,
   {
     title: z.string().describe("Article title"),
     content: z.string().describe("Markdown content"),
@@ -41,14 +65,18 @@ server.tool(
     summary: z.string().optional().describe("Short summary (max 300 chars)"),
     tags: z.array(z.string()).optional().describe("Tags for categorization"),
     namespace: z.string().optional().describe("Logical namespace (default: 'default')"),
-    scope: z.enum(SCOPES as any).optional().describe("Visibility scope"),
+    scope: z.enum(SCOPES as any).optional().describe("Visibility scope (cloud: private/team/global, local: private only)"),
     related: z.array(z.string()).optional().describe("Related article IDs"),
     expires_at: z.string().optional().describe("ISO 8601 expiration timestamp"),
     change_summary: z.string().optional().describe("Required when updating an existing article"),
   },
   async (params) => {
     try {
-      // Update existing article
+      if (isCloudMode()) {
+        const data = await cloudWrite(params as any);
+        return txt(formatArticle(data));
+      }
+      // Local mode
       if (params.id) {
         const existing = getArticle(params.id);
         if (existing) {
@@ -63,11 +91,9 @@ server.tool(
             expires_at: params.expires_at,
             change_summary: params.change_summary || "Updated via AKP",
           });
-          return { content: [{ type: "text" as const, text: updated ? formatArticle(updated) : "Article not found" }] };
+          return txt(updated ? formatArticle(updated) : "Article not found");
         }
       }
-
-      // Create new article
       const article = createArticle({
         title: params.title,
         content: params.content,
@@ -79,28 +105,38 @@ server.tool(
         related: params.related,
         expires_at: params.expires_at,
       });
-
-      return { content: [{ type: "text" as const, text: formatArticle(article) }] };
-    } catch (err: any) {
-      return { content: [{ type: "text" as const, text: `Error: ${err.message}` }], isError: true };
+      return txt(formatArticle(article));
+    } catch (e: any) {
+      return err(`akp_write failed: ${e.message}`);
     }
   }
 );
 
-// --- Tool: akp_search ---
+// ── akp_search ────────────────────────────────────────────────────────────────
+
 server.tool(
   "akp_search",
-  "Search knowledge articles by query. Returns relevant articles ranked by keyword match score.",
+  `Search knowledge articles by query. Cloud mode: semantic search via embeddings. Local mode: keyword matching.`,
   {
     query: z.string().describe("Search query text"),
     type: z.enum(ARTICLE_TYPES as any).optional().describe("Filter by article type"),
     namespace: z.string().optional().describe("Filter by namespace"),
     maturity: z.enum(MATURITY_LEVELS as any).optional().describe("Filter by maturity level"),
+    scope: z.enum(["private", "team", "global", "all"] as const).optional().describe("Search scope (cloud only)"),
     tags: z.array(z.string()).optional().describe("Filter by tags"),
     limit: z.number().optional().describe("Max results (default 5, max 20)"),
   },
   async (params) => {
     try {
+      if (isCloudMode()) {
+        const data = await cloudSearch(params as any);
+        const articles = data.articles || [];
+        if (articles.length === 0) return txt("No articles found matching your query.");
+        const count = data.count || articles.length;
+        const credits = data.credits_charged != null ? ` (${data.credits_charged} credit)` : "";
+        return txt(`Found ${count} articles${credits}:\n\n${formatCloudArticles(data)}`);
+      }
+      // Local
       const results = searchArticles(params.query, {
         type: params.type as any,
         namespace: params.namespace,
@@ -108,43 +144,42 @@ server.tool(
         tags: params.tags,
         limit: params.limit,
       });
-
-      if (results.length === 0) {
-        return { content: [{ type: "text" as const, text: "No articles found matching your query." }] };
-      }
-
+      if (results.length === 0) return txt("No articles found matching your query.");
       const text = results.map((r, i) =>
         `${i + 1}. **${r.title}** (score: ${r.score.toFixed(1)})\n   ID: ${r.id} | Type: ${r.type} | Maturity: ${r.maturity}\n   ${r.summary || r.content.substring(0, 150)}...`
       ).join("\n\n");
-
-      return { content: [{ type: "text" as const, text: `Found ${results.length} articles:\n\n${text}` }] };
-    } catch (err: any) {
-      return { content: [{ type: "text" as const, text: `Error: ${err.message}` }], isError: true };
+      return txt(`Found ${results.length} articles:\n\n${text}`);
+    } catch (e: any) {
+      return err(`akp_search failed: ${e.message}`);
     }
   }
 );
 
-// --- Tool: akp_read ---
+// ── akp_read ──────────────────────────────────────────────────────────────────
+
 server.tool(
   "akp_read",
   "Get a knowledge article by ID. Returns full content, metadata, and version history.",
   {
     id: z.string().describe("Article UUID"),
   },
-  async (params) => {
+  async ({ id }) => {
     try {
-      const article = getArticle(params.id);
-      if (!article) {
-        return { content: [{ type: "text" as const, text: `Article not found: ${params.id}` }], isError: true };
+      if (isCloudMode()) {
+        const data = await cloudRead(id);
+        return txt(formatArticle(data));
       }
-      return { content: [{ type: "text" as const, text: formatArticle(article) }] };
-    } catch (err: any) {
-      return { content: [{ type: "text" as const, text: `Error: ${err.message}` }], isError: true };
+      const article = getArticle(id);
+      if (!article) return err(`Article not found: ${id}`);
+      return txt(formatArticle(article));
+    } catch (e: any) {
+      return err(`akp_read failed: ${e.message}`);
     }
   }
 );
 
-// --- Tool: akp_list ---
+// ── akp_list ──────────────────────────────────────────────────────────────────
+
 server.tool(
   "akp_list",
   "List knowledge articles with optional filters. Returns summaries without full content.",
@@ -152,35 +187,47 @@ server.tool(
     type: z.enum(ARTICLE_TYPES as any).optional().describe("Filter by article type"),
     namespace: z.string().optional().describe("Filter by namespace"),
     maturity: z.enum(MATURITY_LEVELS as any).optional().describe("Filter by maturity level"),
+    scope: z.enum(["private", "team", "global"] as const).optional().describe("Scope filter"),
     tags: z.array(z.string()).optional().describe("Filter by tags"),
     limit: z.number().optional().describe("Max results (default 20, max 50)"),
   },
   async (params) => {
     try {
+      if (isCloudMode()) {
+        const data = await cloudList({
+          type: params.type,
+          namespace: params.namespace,
+          maturity: params.maturity,
+          scope: params.scope,
+          tags: params.tags?.join(","),
+          limit: params.limit,
+        });
+        const articles = data.articles || [];
+        if (articles.length === 0) return txt("No articles found.");
+        return txt(`${articles.length} articles:\n\n${formatCloudArticles(data)}`);
+      }
+      // Local
       const articles = listArticles({
         type: params.type as any,
         namespace: params.namespace,
         maturity: params.maturity as any,
+        scope: params.scope as any,
         tags: params.tags,
         limit: params.limit,
       });
-
-      if (articles.length === 0) {
-        return { content: [{ type: "text" as const, text: "No articles found." }] };
-      }
-
+      if (articles.length === 0) return txt("No articles found.");
       const text = articles.map((a, i) =>
         `${i + 1}. **${a.title}**\n   ID: ${a.id} | Type: ${a.type} | Maturity: ${a.maturity} | v${a.version}\n   Tags: ${a.tags.join(", ") || "none"}`
       ).join("\n\n");
-
-      return { content: [{ type: "text" as const, text: `${articles.length} articles:\n\n${text}` }] };
-    } catch (err: any) {
-      return { content: [{ type: "text" as const, text: `Error: ${err.message}` }], isError: true };
+      return txt(`${articles.length} articles:\n\n${text}`);
+    } catch (e: any) {
+      return err(`akp_list failed: ${e.message}`);
     }
   }
 );
 
-// --- Tool: akp_feedback ---
+// ── akp_feedback ──────────────────────────────────────────────────────────────
+
 server.tool(
   "akp_feedback",
   "Report whether a knowledge article was helpful or harmful. Drives the maturity lifecycle — articles auto-promote with positive feedback and auto-deprecate with negative.",
@@ -188,35 +235,34 @@ server.tool(
     id: z.string().describe("Article UUID"),
     outcome: z.enum(FEEDBACK_OUTCOMES as any).describe("Was this knowledge helpful, harmful, or neutral?"),
   },
-  async (params) => {
+  async ({ id, outcome }) => {
     try {
-      const result = recordFeedback(params.id, params.outcome as any);
-      if (!result) {
-        return { content: [{ type: "text" as const, text: `Article not found: ${params.id}` }], isError: true };
+      if (isCloudMode()) {
+        const data = await cloudFeedback(id, outcome);
+        const changed = data.maturity_changed ? " (CHANGED)" : "";
+        return txt(`Feedback recorded: **${data.outcome || outcome}**\nHelpful: ${data.helpful_count} | Harmful: ${data.harmful_count}\nMaturity: ${data.maturity}${changed}`);
       }
-
-      const text = [
-        `Feedback recorded: **${result.outcome}**`,
-        `Helpful: ${result.helpful_count} | Harmful: ${result.harmful_count}`,
-        `Maturity: ${result.maturity}${result.maturity_changed ? " (CHANGED)" : ""}`,
-      ].join("\n");
-
-      return { content: [{ type: "text" as const, text }] };
-    } catch (err: any) {
-      return { content: [{ type: "text" as const, text: `Error: ${err.message}` }], isError: true };
+      const result = recordFeedback(id, outcome as any);
+      if (!result) return err(`Article not found: ${id}`);
+      return txt(`Feedback recorded: **${result.outcome}**\nHelpful: ${result.helpful_count} | Harmful: ${result.harmful_count}\nMaturity: ${result.maturity}${result.maturity_changed ? " (CHANGED)" : ""}`);
+    } catch (e: any) {
+      return err(`akp_feedback failed: ${e.message}`);
     }
   }
 );
 
-// --- Start server ---
+// ── Start ─────────────────────────────────────────────────────────────────────
+
 async function main() {
-  await initDb();
+  if (!isCloudMode()) {
+    await initDb();
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("AKP server running (local SQLite at ~/.akp/knowledge.db)");
+  console.error(`AKP server running — mode: ${getMode()}`);
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
+main().catch((e) => {
+  console.error("Fatal error:", e);
   process.exit(1);
 });
