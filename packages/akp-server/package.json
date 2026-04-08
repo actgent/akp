@@ -1,7 +1,7 @@
 {
   "name": "@hexaclaw/akp-server",
-  "version": "0.1.0",
-  "description": "AKP (Agent Knowledge Platform) — local knowledge base for AI agents via MCP",
+  "version": "1.0.0",
+  "description": "AKP v1.0 — Agent Knowledge Protocol: articles, episodic memory, file assets via MCP",
   "type": "module",
   "main": "dist/index.cjs",
   "bin": {

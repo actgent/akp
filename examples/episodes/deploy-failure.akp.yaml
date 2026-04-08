@@ -1,0 +1,16 @@
+akp: "1.0"
+id: "c3d4e5f6-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+title: "Episode: Failed deploy due to missing migration"
+type: episode
+situation: "Deployed API v2.3 to production. Database migration was not included in the deploy script."
+outcome: "500 errors for 12 minutes until rollback. Migration had to be run manually before re-deploy."
+reflection: "Always verify pending migrations before deploying. Add migration check to deploy procedure."
+intent: "Deploy latest API changes to production"
+tags: [deploy, incident, database]
+project_id: "proj_hexaclaw"
+success: false
+confidence: 0.9
+article_id: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+created_at: "2026-03-22T15:30:00Z"
+expires_at: "2026-06-20T15:30:00Z"
+created_by: "agent:deploy-bot"

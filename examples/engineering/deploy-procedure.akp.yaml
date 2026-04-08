@@ -1,0 +1,33 @@
+akp: "1.0"
+id: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+title: "Production deployment procedure"
+type: procedure
+maturity: established
+tags: [devops, deploy, production]
+collection: engineering/devops
+project_id: null
+scope: team
+confidence: 0.9
+created_at: "2026-03-24T10:00:00Z"
+updated_at: "2026-03-24T10:00:00Z"
+created_by: "agent:deploy-bot"
+version: 3
+---
+## Prerequisites
+- All tests passing on main branch
+- No active incidents (check #oncall channel)
+- At least 2 hours before end of business day
+
+## Steps
+1. Create release branch from main
+2. Run `npm run build` and verify no warnings
+3. Deploy to staging: `gcloud run deploy --tag staging`
+4. Run smoke tests against staging URL
+5. If smoke tests pass, promote to production: `gcloud run services update-traffic --to-latest`
+6. Monitor error rates for 15 minutes post-deploy
+
+## Rollback
+If error rate exceeds 1%, immediately rollback:
+```
+gcloud run services update-traffic --to-revisions=PREVIOUS_REVISION=100
+```

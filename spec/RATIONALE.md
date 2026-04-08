@@ -54,3 +54,56 @@ By publishing AKP as an open platform standard with a reference implementation, 
 4. **Trust** — developers adopt open standards faster than proprietary APIs
 
 The Anthropic playbook validates this: MCP succeeded because the spec is open, not because Claude's implementation is the only one.
+
+---
+
+## v1.0 Additions
+
+### Why Episodic Memory
+
+Articles are curated, long-lived knowledge. But agents also need experiential recall — "last time I deployed on this project, the migration failed because of X." This is a fundamentally different type of information: ephemeral, situation-specific, and decaying.
+
+We modeled episodes as situation/outcome pairs with a 90-day TTL because:
+- Situation/outcome maps directly to how agents learn from interactions
+- 90 days prevents infinite memory bloat (a common problem with Mem0)
+- TTL extension on access keeps frequently-recalled episodes alive naturally
+- Linking episodes to articles, conversations, and tasks creates a rich context web
+
+### Why Collections as Path Strings
+
+We considered three approaches for hierarchical organization:
+1. **Separate collection entities** with parent_id (like Confluence Spaces)
+2. **Path strings** on articles (like filesystems)
+3. **Nested tags** (like Notion databases)
+
+We chose path strings because:
+- Zero schema overhead — no collection CRUD, no separate table, no tree traversal
+- Agents naturally think in paths ("engineering/backend" is intuitive)
+- Prefix matching for search is trivial (`LIKE 'engineering/%'`)
+- Implicit creation eliminates the "create the folder first" friction
+
+The tradeoff is that collection renaming requires mass-updating articles. We accepted this because renames are rare and the simplicity benefit is large.
+
+### Why project_id
+
+Knowledge needs to be scoped to projects. An agent working on "Project Alpha" should see Alpha's architecture decisions, not every decision ever made. `project_id` is a simple nullable field that enables:
+- Project-scoped search (agent automatically filters by active project)
+- Dashboard project switcher
+- General knowledge (project_id = null) as a fallback
+
+### Why File Assets with Zones
+
+Agents generate images, PDFs, and documents. These need to live somewhere with lifecycle management. We split into two zones:
+- **Permanent** — user uploads, never auto-deleted (like S3)
+- **Staging** — agent-generated content, FIFO-rotated when quota fills (like a build cache)
+
+This avoids the "infinite storage" problem while keeping important files safe. The pinning mechanism (move staging → permanent) lets users promote generated content.
+
+### Why Typed Relations Were Deferred
+
+Three rounds of board review (Claude Opus, Gemini Pro, GPT-4.1) consistently flagged typed relations as premature for v1.0. The `related` field covers the 80% case. Typed relations (supersedes, contradicts, depends-on) require:
+- Graph traversal operations (not defined)
+- Consistency enforcement (what happens when A supersedes B but B is proven?)
+- UI for visualization
+
+These are v1.1 scope. We ship `related` now and upgrade later.
